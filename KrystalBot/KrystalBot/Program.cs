@@ -12,12 +12,11 @@ namespace KrystalBot
         static void Main(string[] args)
         {
             BotSettings settings = new BotSettings();
-
-            BotClient client = new BotClient(settings.BotName, settings.OAuthPass,settings.ChannelName);
+            BotClient client = new BotClient(settings.BotName, settings.OAuthPass,settings.ChannelName,"!");
             client.Connect();
 
-            TaskParser parser = new TaskParser();
-
+            BotManager manager = new BotManager(client);
+            
             Console.ReadKey();
         }
     }

@@ -15,62 +15,65 @@ namespace KrystalBot
         {
             ChatMessage,
         }
-
-        public static BotClient Instance;
+        
         static Timer updateTimer;
 
         TcpClient tcpClient;
         StreamWriter writer;
         StreamReader reader;
 
-        readonly string channelName;
-        readonly string userName;
-        readonly string password;
+        protected string channelName;
+        protected string userName;
+        protected string password;
 
-        readonly string twitchHostname = "irc.twitch.tv";
-        readonly int twitchPort = 6667;
-        
-        readonly string chatMsgID = "PRIVMSG";
-        readonly string chatMsgPrefix;
+        protected string twitchHostname = "irc.twitch.tv";
+        protected int twitchPort = 6667;
+
+        protected string chatMsgID = "PRIVMSG",welcomMsgID = "Welcome, GLHF!";
+        protected string chatMsgPrefix;
+        protected string commandPrefix;
 
         Queue<string> quedMessages;
         DateTime lastMessageTime;
-
-        public string UserName {
-            get {
-                return userName;
-            }
-        }
-
+        
         public BotClient(string userName, string password, string channelName)
         {
-            if(string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(password))
+            Initialize(userName, password, channelName, "~");
+        }
+
+        public BotClient(string userName,string password, string channelName, string cmdPrefix)
+        {
+            Initialize(userName, password, channelName, cmdPrefix);
+        }
+
+        void Initialize(string userName,string password,string channelName,string cmdPrefix)
+        {
+            if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(password))
             {
-                Console.WriteLine($"Error, username or passward was empty. Username:[{userName}] Password:[{password}]" +
-                    $"Get you OAuth key by going to twitchapps.tmi and using the desired twitch account.");
+                Console.WriteLine($"Error, username or passward was empty. Username:[{userName}] Password:[{this.password}]" +
+                    $" Get your OAuth key by going to twitchapps.tmi and using the desired twitch account.");
                 return;
             }
-
-            Instance = this;
 
             this.userName = userName.ToLower();
             this.password = password;
             this.channelName = channelName.ToLower();
+            this.chatMsgPrefix = $":{this.userName}!{this.userName}@{this.userName}.tmi.twitch.tv {chatMsgID} #{this.channelName} :";
+            this.commandPrefix = cmdPrefix;
 
-            chatMsgPrefix = $":{this.userName}!{this.userName}@{this.userName}.tmi.twitch.tv {chatMsgID} #{this.channelName} :";
-            
+            this.quedMessages = new Queue<string>();
             updateTimer = new Timer(OnUpdate, null, 0, 400);
-            quedMessages = new Queue<string>();
         }
 
-        internal void Connect()
+        public void Connect()
         {
             MakeConnection();
         }
 
         private void MakeConnection()
         {
-            Console.WriteLine("Creating a connection...");
+            Console.WriteLine(DEBUG("Creating a connection..."));
+            Connected = false;
             tcpClient = new TcpClient(twitchHostname, twitchPort);
 
             reader = new StreamReader(tcpClient.GetStream());
@@ -85,7 +88,7 @@ namespace KrystalBot
             writer.Flush();
             writer.WriteLine("JOIN #terrestrialgames");
             writer.Flush();
-            Console.WriteLine("Connection established.");
+            Console.WriteLine(DEBUG("Finished."));
             lastMessageTime = DateTime.Now;
         }
         
@@ -112,7 +115,7 @@ namespace KrystalBot
             {
                 if(quedMessages.Count > 0)
                 {
-                    Console.WriteLine("Sending a message...");
+                    Console.WriteLine(DEBUG("Sending message..."));
 
                     string message = quedMessages.Dequeue();
                     writer.WriteLine($"{chatMsgPrefix} {message}");
@@ -126,18 +129,17 @@ namespace KrystalBot
         {
             if (tcpClient.Available > 0 || reader.Peek() >= 0)
             {
-                bool wasChatMsg = false;
                 var message = reader.ReadLine();
-                wasChatMsg = CheckIfChatMessage(wasChatMsg, message);
-
-                if (!wasChatMsg)
+                if (!Connected && message.Contains(welcomMsgID)) Connected = true;
+                
+                if (!CheckIfChatMessage(message))
                 {
-                    Console.WriteLine(message);
+                    Console.WriteLine(IRC_DEBUG(message));
                 }
             }
         }
 
-        private bool CheckIfChatMessage(bool wasChatMsg, string message)
+        private bool CheckIfChatMessage(string message)
         {
             var iCollIndex = message.IndexOf(":", 1);
             var iBangIndex = message.IndexOf("!", 1);
@@ -148,14 +150,23 @@ namespace KrystalBot
                 {
                     // Received a viewer message
                     var chatMessage = message.Substring(iCollIndex + 1);
-                    var msgSender = message.Substring(1, iBangIndex - 1);
-                    OnMessageReceived(chatMessage, msgSender);
+                    var messageSender = message.Substring(1, iBangIndex - 1);
 
-                    wasChatMsg = true;
+                    if(commandPrefix != "~" && chatMessage.StartsWith(commandPrefix))
+                    {
+                        var command = chatMessage.Substring(commandPrefix.Length);
+                        CommandReceived(command);
+                    }
+                    else
+                    {
+                        MessageReceived(chatMessage, messageSender);
+                    }
+                    
+                    return true;
                 }
             }
 
-            return wasChatMsg;
+            return false;
         }
 
         public void SendMessage(string _message)
@@ -163,13 +174,50 @@ namespace KrystalBot
             quedMessages.Enqueue(_message);
         }
 
-        private void OnMessageReceived(string message,string sender)
+        // Events
+        public delegate void D_OnMessageReceived(string m,string s);
+        public delegate void D_OnCommandReceived(string c);
+        public event D_OnMessageReceived OnMessageReceived;
+        public event D_OnCommandReceived OnCommandReceived;
+
+        private void MessageReceived(string message,string sender)
         {
-            if (message.StartsWith("hi", StringComparison.InvariantCultureIgnoreCase))
-            {
-                SendMessage($"Hello to you too, {sender}");
-            }
-            Console.WriteLine("VIEWER MESSAGE: " + message + " SENDER: " + sender);
+            OnMessageReceived?.Invoke(message, sender);
+            Console.WriteLine(CHAT_DEBUG(message,sender));
         }
+
+        private void CommandReceived(string command)
+        {
+            OnCommandReceived?.Invoke(command);
+        }
+
+        // Properties
+        public bool Connected { get; private set; }
+
+        public string UserName {
+            get {
+                return userName;
+            }
+        }
+
+        // Helper methods
+        string CHAT_DEBUG(string msg,string sender = null)
+        {
+            if (sender != null)
+                return $"{DateTime.Now}:CHAT MESSAGE: {msg} SENDER: {sender}";
+            else
+                return $"{DateTime.Now}:CHAT MESSAGE: {msg}";
+        }
+
+        string IRC_DEBUG(string msg)
+        {
+            return $"{DateTime.Now}:IRC MESSAGE: {msg}";
+        }
+
+        string DEBUG(string msg)
+        {
+            return $"{DateTime.Now}:DEBUG MESSAGE: {msg}";
+        }
+        
     }
 }

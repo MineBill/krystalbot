@@ -43,9 +43,12 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BotClient.cs" />
+    <Compile Include="BotManager.cs" />
     <Compile Include="BotSettings.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RepeatingMessage.cs" />
+    <Compile Include="Task.cs" />
     <Compile Include="TaskParser.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -10,9 +10,18 @@ namespace KrystalBot
 {
     class TaskParser
     {
-        public void Start()
+        BotClient client;
+
+        public TaskParser(BotClient client)
         {
-            string content = File.ReadAllText(Environment.CurrentDirectory + "/tasks.cfg");
+            this.client = client;
+        }
+
+        public Task[] Parse(string path)
+        {
+            List<Task> tasks = new List<Task>();
+
+            string content = File.ReadAllText(path);
             content = content.Replace(Environment.NewLine, " ");
             //Console.WriteLine(lines);
             if (content.Length > 0)
@@ -40,11 +49,14 @@ namespace KrystalBot
                     }
 
                     //Console.WriteLine(taskContent);
-                    Task type = GetTaskByString(typeAndArgs[0]);
-                    type.GetArgsAndContent(typeAndArgs, taskContent);
-                    type.Run();
+                    Task task = GetTaskByString(typeAndArgs[0]);
+                    task.GetArgsAndContent(typeAndArgs, taskContent);
+
+                    tasks.Add(task);
                 }
             }
+
+            return tasks.ToArray();
         }
 
         private Task GetTaskByString(string v)
@@ -52,7 +64,7 @@ namespace KrystalBot
             switch (v)
             {
                 case "repeatingmsg":
-                    return new RepeatingMessage();
+                    return new RepeatingMessage() { Client = client};
                 default:
                     return new Task(-1,v);
             }

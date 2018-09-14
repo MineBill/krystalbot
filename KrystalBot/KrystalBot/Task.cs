@@ -8,7 +8,7 @@ namespace KrystalBot
         {
 
         }
-
+        
         public Task(int i, string v)
         {
             if (i == -1)
@@ -35,5 +35,7 @@ namespace KrystalBot
         {
 
         }
+
+        public BotClient Client { get; set; }
     }
 }
